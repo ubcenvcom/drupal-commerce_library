@@ -1,0 +1,18 @@
+name = Commerce Product library services
+description = Services API extension
+package = Commerce (library)
+dependencies[] = number
+dependencies[] = commerce_product
+dependencies[] = commerce_order
+dependencies[] = commerce_stock
+dependencies[] = commerce_ss
+dependencies[] = commerce_checkout
+dependencies[] = rules
+dependencies[] = list
+dependencies[] = views
+dependencies[] = commerce_services
+dependencies[] = commerce_library
+
+core = 7.x
+version = "7.x-0.1"
+

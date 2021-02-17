@@ -1,0 +1,23 @@
+name = Commerce Product library
+description = Make products lendable
+package = Commerce (library)
+dependencies[] = number
+dependencies[] = commerce_product
+dependencies[] = commerce_order
+dependencies[] = commerce_stock
+dependencies[] = commerce_ss
+dependencies[] = commerce_checkout
+dependencies[] = rules
+dependencies[] = list
+dependencies[] = views
+
+files[] = includes/commerce_library.controller.inc
+
+; Views handlers
+files[] = includes/views/handlers/commerce_library_handler_filter_loan_state.inc
+files[] = includes/views/handlers/commerce_library_handler_field_loan_link.inc
+
+core = 7.x
+configure = admin/commerce/config/library
+version = "7.x-0.1"
+

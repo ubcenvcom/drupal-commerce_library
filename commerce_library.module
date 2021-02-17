@@ -1,0 +1,905 @@
+<?php
+
+/**
+ * @file
+ * Allow commerce products to be lent for a specific time and then re-added back to the system.
+ *
+ */
+
+function commerce_library_entity_info() {
+  $return = array(
+    'commerce_library_loan' => array(
+      'label' => t('Commerce Loan', array(), array('context' => 'a drupal commerce product loan')),
+      'controller class' => 'CommerceLibraryLoanEntityController',
+      'locking mode' => 'pessimistic',
+      'base table' => 'commerce_library_loan',
+      'load hook' => 'commerce_library_loan_load',
+      'uri callback' => 'commerce_library_loan_uri',
+      'label callback' => 'commerce_library_loan_label',
+      'fieldable' => TRUE,
+      'entity keys' => array(
+        'id' => 'loan_id',
+        'bundle' => 'type',
+      ),
+      'bundle keys' => array(
+        'bundle' => 'type',
+      ),
+      'bundles' => array(
+        'commerce_library_loan' => array(
+          'label' => t('Loan', array(), array('context' => 'a drupal commerce loan')),
+        ),
+      ),
+      'view modes' => array(
+        'administrator' => array(
+          'label' => t('Administrator'),
+          'custom settings' => FALSE,
+        ),
+        'customer' => array(
+          'label' => t('Customer'),
+          'custom settings' => FALSE,
+        ),
+      ),
+      'token type' => 'commerce-library-loan',
+      'metadata controller class' => '',
+      'access callback' => 'commerce_entity_access',
+      'access arguments' => array(
+        'user key' => 'uid',
+        'access tag' => 'commerce_library_loan_access',
+      ),
+      'permission labels' => array(
+        'singular' => t('loan'),
+        'plural' => t('loans'),
+      ),
+
+      // // Prevent Redirect alteration of the order form.
+      'redirect' => FALSE,
+    ),
+  );
+
+  return $return;
+}
+
+/**
+ * Implements hook_entity_property_info().
+ */
+function commerce_library_entity_property_info() {
+  $info = array();
+
+  $properties = &$info['commerce_library_loan']['properties'];
+
+  $properties['loan_id'] = array(
+    'type' => 'integer',
+    'label' => t('Loan ID', array(), array('context' => 'a drupal commerce loan')),
+    'description' => t('The internal numeric ID of the loan.'),
+    'schema field' => 'loan_id',
+  );
+  $properties['order_id'] = array(
+    'type' => 'integer',
+    'label' => t('Order ID', array(), array('context' => 'a drupal commerce order')),
+    'description' => t('The internal numeric ID of the order this product loan is from.'),
+    'required' => TRUE,
+    'schema field' => 'order_id',
+  );
+  $properties['order'] = array(
+    'label' => t('Order', array(), array('context' => 'a drupal commerce order')),
+    'type' => 'commerce_order',
+    'description' => t('The order the loan item belongs to.'),
+    'getter callback' => 'commerce_line_item_get_properties',
+    'setter callback' => 'commerce_line_item_set_properties',
+    'required' => TRUE,
+    'computed' => TRUE,
+    'clear' => array('order_id'),
+  );
+  $properties['status'] = array(
+    'type' => 'text',
+    'label' => t('Status'),
+    'description' => t('The current status of the loan.'),
+    'required' => TRUE,
+    'schema field' => 'status',
+  );
+  $properties['amount'] = array(
+    'label' => t('Amount'),
+    'description' => t('Amount'),
+    'type' => 'decimal',
+    'getter callback' => 'entity_property_verbatim_get',
+    'setter callback' => 'entity_property_verbatim_set',
+    'required' => TRUE,
+    'schema field' => 'amount',
+  );
+
+  $properties['created'] = array(
+    'type' => 'date',
+    'label' => t('Date created'),
+    'description' => t('The date the order was created.'),
+    'setter callback' => 'entity_property_verbatim_set',
+    'setter permission' => 'administer commerce_order entities',
+    'schema field' => 'created',
+  );
+  $properties['updated'] = array(
+    'type' => 'date',
+    'label' => t('Date changed'),
+    'description' => t('The date the loan was most recently updated.'),
+    'setter callback' => 'entity_property_verbatim_set',
+    'setter permission' => 'administer commerce_order entities',
+    'schema field' => 'updated',
+  );
+  $properties['fullfilled'] = array(
+    'type' => 'date',
+    'label' => t('Date fullfilled'),
+    'description' => t('The date the loan was fullfilled.'),
+    'setter callback' => 'entity_property_verbatim_set',
+    'setter permission' => 'administer commerce_order entities',
+    'schema field' => 'fullfilled',
+  );
+  $properties['due'] = array(
+    'type' => 'date',
+    'label' => t('Date due'),
+    'description' => t('The date the loan is due.'),
+    'setter callback' => 'entity_property_verbatim_set',
+    'setter permission' => 'administer commerce_order entities',
+    'schema field' => 'due',
+  );
+  $properties['returned'] = array(
+    'type' => 'date',
+    'label' => t('Date returned'),
+    'description' => t('The date the loan was returned.'),
+    'setter callback' => 'entity_property_verbatim_set',
+    'setter permission' => 'administer commerce_order entities',
+    'schema field' => 'returned',
+  );
+
+  return $info;
+}
+
+
+function commerce_library_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'commerce_library') . '/includes/views',
+  );
+}
+
+function commerce_library_permission() {
+  return array(
+    'administer commerce_library settings' => array('title' => t('Administer commerce library settings')),
+    'return commerce_library loans' => array('title' => t('Return commerce product loans')),
+    'renew commerce_library loans' => array('title' => t('Renew commerce product loans'))
+  );
+}
+
+
+
+/**
+ * Implements hook_commerce_checkout_pane_info().
+ */
+function commerce_library_commerce_checkout_pane_info() {
+  $checkout_panes = array();
+
+  $checkout_panes['cart_contents_loans'] = array(
+    'title' => t('Product loans'),
+    'base' => 'commerce_library_contents_pane',
+    'file' => 'includes/commerce_library.checkout_pane.inc',
+    'page' => 'checkout',
+    'weight' => -12,
+  );
+
+  return $checkout_panes;
+}
+
+/**
+ * Implements hook_menu().
+ */
+function commerce_library_menu() {
+  $items = array();
+
+  $items['admin/commerce/config/library'] = array(
+    'title' => 'Library management',
+    'description' => 'Configure library settings.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('commerce_library_admin_form'),
+    'access arguments' => array('administer commerce_library settings'),
+    'file' => 'includes/commerce_library.admin.inc',
+    'type'  => MENU_NORMAL_ITEM,
+  );
+
+  $items['admin/commerce/loans/%commerce_library_loan/return'] = array(
+    'title' => 'Return',
+    'description' => 'Return loan.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('commerce_library_return_form', 3),
+    'access arguments' => array('return commerce_library loans'),
+    'file' => 'includes/commerce_library.forms.inc',
+    'context' => MENU_CONTEXT_INLINE,
+    'type'  => MENU_LOCAL_TASK,
+  );
+
+  $items['admin/commerce/loans/%commerce_library_loan/renew'] = array(
+    'title' => 'Renew',
+    'description' => 'Renew loan.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('commerce_library_renew_form', 3),
+    'access arguments' => array('renew commerce_library loans'),
+    'file' => 'includes/commerce_library.forms.inc',
+    'context' => MENU_CONTEXT_INLINE,
+    'type'  => MENU_LOCAL_TASK,
+  );
+
+  return $items;
+}
+
+function commerce_library_get_default_messages() {
+  $options=array();
+
+  $options['mail']['due-notify-title']=variable_get('commerce_library_due_subject', t("Product [commerce-product:title] loan is due soon"));
+  $options['mail']['due-notify-body']=variable_get('commerce_library_due_body', t("Dear [user:name]<br>\nYour loan of the product, [commerce-product:title] ([commerce-product:sku]), should be returned soon.") );
+
+  $options['mail']['late-notify-title']=variable_get('commerce_library_late_subject', t("Product [commerce-product:sku] loan is due"));
+  $options['mail']['late-notify-body']=variable_get('commerce_library_late_body', t("Dear [user:name]<br>\nYour loan of the product, [commerce-product:title] ([commerce-product:sku]), is late and should be returned as soon as possible."));
+
+  return $options;
+}
+
+/**
+ * Loan states
+ * - canceled: Order and loans in it are canceled
+ * - pending: Order and loans are pending handling
+ * - completed: Loaned items have been delivered to customer
+ */
+function commerce_library_loan_state_info() {
+  $s = array();
+
+  $s['canceled'] = array(
+    'name' => 'canceled',
+    'title' => t('Canceled'),
+    'description' => t('Loans in this state have been canceled through some user action.'),
+    'weight' => -10,
+    'default_status' => 'canceled',
+  );
+  $s['pending'] = array(
+    'name' => 'pending',
+    'title' => t('Pending'),
+    'description' => t('Loans in this state have been created and are awaiting further action.'),
+    'weight' => 0,
+    'default_status' => 'pending',
+  );
+  $s['completed'] = array(
+    'name' => 'completed',
+    'title' => t('Completed'),
+    'description' => t('Loans in this state have been completed as far as the customer is concerned.'),
+    'weight' => 10,
+    'default_status' => 'completed',
+  );
+
+  return $s;
+}
+
+function commerce_library_loan_label($entity, $entity_type) {
+  return t('Loan @number', array('@number' => $entity->order_number));
+}
+
+function commerce_library_loan_uri($order) {
+  // Allow modules to specify a path, returning the first one found.
+  foreach (module_implements('commerce_library_loan_uri') as $module) {
+    $uri = module_invoke($module, 'commerce_library_loan_uri', $order);
+
+    // If the implementation returned data, use that now.
+    if (!empty($uri)) {
+      return $uri;
+    }
+  }
+
+  return NULL;
+}
+
+function commerce_library_send_message($type, $account, $product) {
+  $params['account'] = $account;
+  $params['product'] = $product;
+  drupal_mail('commerce_library', $type, $account->mail, user_preferred_language($account), $params);
+}
+
+function commerce_library_mail($key, &$message, $params) {
+  $options['language'] = $message['language'];
+
+  $a=$params['account'];
+  $p=$params['product'];
+
+  $td=array(
+   'user'=>$a,
+   'commerce-product'=>$p,
+  );
+
+  $variables=array();
+
+  switch ($key) {
+    case 'reminder':
+        $subject=t("Product [commerce-product:title] loan is due soon");
+	$body=t("Dear [user:name]<br>\nYour loan of the product, [commerce-product:title] ([commerce-product:sku]), should be returned soon.");
+    break;
+    case 'late':
+        $subject=t("Product [commerce-product:sku] loan is due");
+	$body=t("Dear [user:name]<br>\nYour loan of the product, [commerce-product:title] ([commerce-product:sku]), is late and should be returned as soon as possible.");
+    break;
+    default:
+	return;
+  }
+
+  $message['subject'] = token_replace($subject, $td);
+  $message['body'][] = token_replace($body, $td);
+}
+
+/**
+ * Implements hook_cron().
+ */
+function commerce_library_cron() {
+  $last_timestamp = variable_get('commerce_library_onceperday_last', 0);
+  $now=time();
+
+  $last_date = date('Y-m-d', $last_timestamp);
+  $this_date = date('Y-m-d', $now);
+  $new_day = ($this_date != $last_date);
+
+  if (!$new_day)
+    return;
+
+  $this_hour = date('H', $now);
+
+  // XXX: every morning for now, could be a setting
+  $after_hour = $this_hour >= 8;
+  if (!$after_hour)
+    return;
+
+  variable_set('commerce_library_onceperday_last', $now);
+
+  // XXX: Use proper settings for these, but for now:
+  // - reminder 7 days before (use 7 for invalid, clamp to 2 - 14)
+  // - late notification 1 day after (use -1 for invalid, clamp to -7 - -1)
+
+  $reminder_days=variable_get('commerce_library_reminder_days', 7);
+  if ($reminder_days<2 || $reminder_days>14) $reminder_days=7;
+
+  $late_days=variable_get('commerce_library_late_days', -1);
+  if ($late_days>-1 || $late_days<-7) $late_days=-1;
+
+  commerce_library_check_reminders($reminder_days);
+  commerce_library_check_reminders($late_days);
+}
+
+/**
+ * Check for loans that are returned (in given days) and send reminder emails to the user
+ */
+function commerce_library_check_reminders($days) {
+  $dueby=time()+(86400*$days);
+
+  $q=db_select('commerce_library_loan', 'cll');
+  $q->join('commerce_order', 'co', 'cll.order_id=co.order_id');
+
+  $q->fields('cll', array('loan_id', 'product_id', 'due'));
+  $q->fields('co', array('uid', 'mail'));
+
+  $q->condition('due', $dueby, '<')
+    ->condition('returned', 0, '=')
+    ->orderBy('due', 'ASC');
+
+  $reminders=$q->execute();
+
+  foreach ($reminders as $r) {
+    $account = user_load($r->uid);
+    $account->mail=$r->mail;
+    $product=commerce_product_load($r->product_id);
+    // Reminder if positive days, late message if negative or 0
+    commerce_library_send_message($days>0 ? 'reminder' : 'late', $account, $product);
+  }
+
+}
+
+/**
+ * Return given loan
+ * - Adds back the loan amount to the products stock
+ * - Marks loan as returned
+ */
+function commerce_library_loan_return($loan) {
+  if (empty($loan))
+    return false;
+
+  $product=commerce_product_load($loan->product_id);
+
+  $transaction = db_transaction();
+
+  // Mark the loan as returned
+  $n = db_update('commerce_library_loan')
+   ->fields(array(
+     'status' => 'completed',
+     'returned' => REQUEST_TIME,
+   ))
+   ->condition('loan_id', $loan->loan_id, '=')
+   ->execute();
+
+  // Add back to product stock
+  if (module_exists('commerce_ss')) {
+    commerce_library_commerce_ss_stock_adjust($product, $loan->amount);
+  }
+
+  return $n>0 ? true : false;
+}
+
+/**
+ * Renew given loan.
+ *
+ * Updates the due date (today+loan date)
+ * Updates renew counter
+ */
+function commerce_library_loan_renew($loan) {
+  if (empty($loan))
+    return false;
+
+  // Check for invalid values, this should not happen but who knows...
+  // XXX: Be more specific with the return value
+
+  if ($loan->status!='completed' || $loan->returned>$this->fullfilled)
+    return false;
+
+  // Due for return before fullfilled?
+  if ($loan->due<$this->fullfilled)
+    return false;
+
+  $product=commerce_product_load($loan->product_id);
+
+  $loan_days=commerce_library_get_product_loan_days($product);
+
+  // XXX: We should check status of the loan, if not completed, bail.
+
+  $loan->updated=REQUEST_TIME;
+
+  // If due date is set properly, as it should, add loan days to it.
+  // but in case the due date is invalid, use current time, just in case.
+  if ($loan->due>0)
+    $loan->due=$loan->due+(86400*$loan_days);
+  else
+    $loan->due=time()+(86400*$loan_days);
+
+  $loan->reloaned++;
+
+  return commerce_library_loan_save($loan);
+}
+
+function commerce_library_get_product_loan_days($product)
+{
+$days=(int)$product->commerce_library['und'][0]['value'];
+
+if ($days>0)
+	return $days;
+
+return false;
+}
+
+/**
+ * commerce_ss stock adjusting, copy&paste here as the function is in a rules.inc in the commerce_stock module :(
+ */
+function commerce_library_commerce_ss_stock_adjust($product, $qty) {
+  if (!commerce_ss_product_type_enabled($product->type)) {
+    return;
+  }
+
+  $wrapper = entity_metadata_wrapper('commerce_product', $product);
+
+  $new_stock = $wrapper->commerce_stock->value() + $qty;
+  $wrapper->commerce_stock->set($new_stock);
+  $result = $wrapper->save();
+
+  if ($result) {
+    watchdog('commerce_library', 'Modified stock level of product %sku by %amount', array('%sku' => $product->sku, '%amount' => $qty));
+  } else {
+    watchdog('commerce_library', 'Failed attempt to modify stock level of product %sku by %amount', array('%sku' => $product->sku, '%amount' => $qty), WATCHDOG_ERROR);
+  }
+
+  return $result;
+}
+
+
+/**
+ * Implements hook_entity_property_info_alter().
+ */
+function commerce_library_entity_property_info_alter(&$info) {
+  if (empty($info['commerce_product']['bundles'])) {
+    return;
+  }
+
+  $properties = array();
+
+  foreach ($info['commerce_product']['bundles'] as $bundle => $bundle_info) {
+    $bundle_info += array('properties' => array());
+    $properties += $bundle_info['properties'];
+  }
+
+  if (isset($properties['commerce_library'])) {
+    $info['commerce_product']['properties']['commerce_stock'] = $properties['commerce_stock'];
+  }
+
+}
+
+/**
+ * Implements hook_form_ID_alter().
+ *
+ */
+function commerce_library_form_commerce_product_ui_product_type_form_alter(&$form, &$form_state) {
+
+  return;
+
+  // Get the product bundle type.
+  $type = $form_state['product_type']['type'];
+  // Check if loan enabled for the type.
+  if (commerce_library_product_type_enabled($type)) {
+    $form['product_type']['loan_days'] = array(
+      // Provide a configuration option for loan days
+      '#type' => 'textfield',
+      '#title' => t('Loan in days'),
+      '#default_value' => variable_get('commerce_library_default_loan_days_'.$type, FALSE),
+      '#description' => t('Set the loan days for this product'),
+      '#element_validate' => array('element_validate_integer_positive'),
+    );
+  }
+}
+
+/**
+ * Implements hook_form_ID_alter().
+ *
+ */
+function commerce_library_form_commerce_product_ui_product_form_alter(&$form, &$form_state) {
+  // Get the product bundle type.
+  $type = $form_state['commerce_product']->type;
+  // Check if loan is enabled for the type.
+  if (commerce_library_product_type_enabled($type)) {
+    $days = variable_get('commerce_library_default_loan_days_'.$type, FALSE);
+    if (!$days) {
+      $language = $form['commerce_library']['#language'];
+      $form['commerce_library'][$language][0]['value']['#default_value'] = intval($form['commerce_library'][$language][0]['value']['#default_value']);
+    }
+  }
+}
+
+/**
+ * Implements hook_inline_entity_form_alter().
+ *
+ */
+function commerce_library_inline_entity_form_entity_form_alter(&$entity_form, &$form_state) {
+  if ($entity_form['#entity_type'] == 'commerce_product') {
+    $type = $entity_form['#bundle'];
+    if (commerce_library_product_type_enabled($type)) {
+      $days = variable_get('commerce_library_default_loan_days_'.$type, FALSE);
+      if (!$days) {
+        $language = $entity_form['commerce_stock']['#language'];
+        $entity_form['commerce_library'][$language][0]['value']['#default_value'] = intval($entity_form['commerce_library'][$language][0]['value']['#default_value']);
+      }
+    }
+  }
+}
+
+/**
+ * Determines whether library management is enabled on a product type.
+ *
+ * @param $type
+ *   The product type.
+ *
+ * @return bool
+ *   TRUE if library management is enabled.
+ */
+function commerce_library_product_type_enabled($type) {
+  $instance = field_info_instance('commerce_product', 'commerce_library', $type);
+  return (!empty($instance));
+}
+
+function commerce_library_product_type_override_enabled($type) {
+  $instance = field_info_instance('commerce_product', 'commerce_library_days', $type);
+  return (!empty($instance));
+}
+
+/**
+ * Determines whether library management is enabled for a product.
+ *
+ * @param $product
+ *   The product to check.
+ *
+ * @return bool
+ *   TRUE if library management is enabled on the product's product type.
+ */
+function commerce_library_product_enabled($product) {
+  return commerce_library_product_type_enabled($product->type);
+}
+
+/**
+ * For a given a line item, determine whether library management is enabled.
+ *
+ * @param $line_item
+ *   The line item to check.
+ *
+ * @return
+ *   Boolean: TRUE if loan management is enabled on the product's product type.
+ */
+function commerce_library_line_item_product_enabled($line_item) {
+  return commerce_library_product_type_enabled($line_item->product->type);
+}
+
+/**
+ * Implements hook_inline_entity_form_table_fields_alter().
+ */
+function commerce_library_inline_entity_form_table_fields_alter(&$fields, $context) {
+  if ($context['entity_type'] == 'commerce_product') {
+    $has_loan_field = TRUE;
+    foreach ($context['allowed_bundles'] as $bundle) {
+      if (!commerce_library_product_type_enabled($bundle)) {
+        $has_load_field = FALSE;
+      }
+    }
+
+    if ($has_loan_field) {
+      // Loan status 
+      $fields['commerce_library'] = array(
+        'type' => 'field',
+        'label' => t('Lendable'),
+        'formatter' => 'number_integer',
+        'weight' => 101);
+
+      // Loan days
+      $fields['commerce_library_loan_days'] = array(
+        'type' => 'field',
+        'label' => t('Loan days'),
+        'formatter' => 'number_integer',
+        'weight' => 101,
+      );
+    }
+  }
+}
+
+function commerce_library_loan_new($order_id, $product_id, $amount=0, $status = NULL, $type = 'commerce_library_loan') {
+  // If no status was specified, use the default Pending status.
+  if (!isset($status)) {
+    $status = 'pending';
+  }
+
+  return entity_get_controller('commerce_library_loan')->create(array(
+    'order_id' => $order_id,
+    'product_id' => $product_id,
+    'amount' => $amount,
+    'status' => $status,
+  ));
+}
+
+function commerce_library_loan_save($loan) {
+  return entity_get_controller('commerce_library_loan')->save($loan);
+}
+
+function commerce_library_loan_load_multiple($loan_ids = array(), $conditions = array(), $reset = FALSE) {
+  return entity_load('commerce_library_loan', $loan_ids, $conditions, $reset);
+}
+
+function commerce_library_loan_load($loan_id) {
+  $loans = commerce_library_loan_load_multiple(array($loan_id), array());
+  return $loans ? reset($loans) : FALSE;
+}
+
+function commerce_library_loan_status_update($loan, $name, $skip_save = FALSE) {
+  // Do not update the status if the order is already at it.
+  if ($loan->status != $name) {
+    $loan->status = $name;
+    commerce_library_loan_save($loan);
+  }
+
+  return $order;
+}
+
+function commerce_library_loan_access($op, $loan = NULL, $account = NULL) {
+  return commerce_entity_access($op, $loan, $account, 'commerce_library_loan');
+}
+
+function commerce_library_loan_rules_access($type, $name) {
+  if ($type == 'event' || $type == 'condition') {
+    return commerce_library_loan_access('view');
+  }
+}
+
+
+/**
+ * Find loans from given order, returns an array of products that was lended.
+ */
+function commerce_library_extract_lendable_products($order) {
+  $ids=array();
+
+  foreach ($order->commerce_line_items['und'] as $num => $item) {
+    $ids[]=$item['line_item_id'];
+  }
+
+  $line_items=commerce_line_item_load_multiple($ids);
+
+  $lp=array();
+  foreach ($line_items as $line_item) {
+   
+    // Skip non-products
+    if ($line_item->type!='product')
+       continue;
+
+    $liemw=entity_metadata_wrapper('commerce_line_item', $line_item);
+
+    $product_id=$liemw->commerce_product->product_id->value();
+
+    $product=commerce_product_load($product_id);
+
+    if (!commerce_library_product_type_enabled($product->type))
+      continue;
+
+    // Add the full product object for easy access
+    $line_item->product_class=$product;
+
+    $lp[$product_id]=$line_item;
+  }
+
+  return $lp;
+}
+
+/**
+ * Load all loans by a specific user
+ * XXX: Do even need this ?
+ */
+function commerce_library_load_loans_by_user($user)
+{
+}
+
+/**
+ * Load loan enties for a specific order
+ */
+function commerce_library_load_loans_by_order($order) {
+  $ol = db_select('commerce_library_loan', 'cll')
+    ->fields('cll', array('loan_id'))
+    ->condition('order_id', $order->order_id, '=')
+    ->orderBy('product_id', 'ASC')
+    ->execute();
+  
+  $r=array();
+  foreach ($ol as $l) {
+    $loan=commerce_library_loan_load($l->loan_id);
+    $r[$l->product_id]=$loan;
+  }
+  return $r;
+}
+
+/**
+ * Saves loans from a order and updates details according to status
+ */
+function commerce_library_save_loans_from_order($order, $status) {
+  $loans=commerce_library_extract_lendable_products($order);
+
+  // Ignore if there are no lendable products in the order
+  if (empty($loans)) {
+    // Just in case, delete any loans from this order as the admin can remove items from the order
+    // XXX: Or should we mark them items as canceled instead?
+    $num_deleted = db_delete('commerce_library_loan')
+        ->condition('order_id', $order->order_id)
+        ->execute();
+    return;
+  }
+
+  // If there are, check if this loan is alreday saved or not
+  $lo=commerce_library_load_loans_by_order($order);
+
+  // Save them
+  foreach ($loans as $product_id => $line_item) {
+    // Existing loan, update details
+
+    // Get the product loan days
+    $loan_days=commerce_library_get_product_loan_days($line_item->product_class);
+
+    // If the days are false (invalid or 0), we assume the product is a "normal" product
+    if ($loan_days===fales)
+        continue;
+
+    if (isset($lo[$product_id])) {
+        $loan=$lo[$product_id];
+        $loan->status=$status;
+
+        $loan->updated=REQUEST_TIME;
+
+        switch ($status) {
+            case 'completed':
+		if ($loan->due==0) {
+                  $loan->fullfilled=REQUEST_TIME;
+                  $loan->due=$loan->fullfilled+(86400*$loan_days);
+		}
+            break;
+            case 'processing':
+                $loan->fullfilled=REQUEST_TIME;
+                $loan->due=null;
+            break;
+            case 'pending':
+            case 'canceled':
+                $loan->fullfilled=null;
+                $loan->due=null;
+            break;
+            default:;
+        }
+    } else {
+	// New loan, save it
+        $loan=commerce_library_loan_new($order->order_id, $product_id, (int)$line_item->quantity, $status);
+	// Special case in case order is complete but loans are not yet saved
+	switch ($order->status) {
+          case 'complete':
+            $loan->fullfilled=$order->placed;
+            $loan->due=$loan->fullfilled+(86400*$loan_days);
+          break;
+          case 'processing':
+            $loan->fullfilled=$order->placed;
+            $loan->due=null;
+          break;
+          case 'pending':
+          case 'canceled':
+          default:;
+	}
+    }
+    commerce_library_loan_save($loan);
+  }
+}
+
+/**
+ * Update loan data from order details
+ *
+ * When order is placed and put into pending state, insert the pending loan into
+ */
+function commerce_library_loan_update_from_order($order) {
+  switch ($order->status) {
+    case 'cart':
+    case 'checkout_checkout':
+    case 'checkout_shipping':
+    case 'checkout_review':
+    case 'checkout_complete':
+      // Just ignore it for now
+      //watchdog('commerce_library', 'Ignoring status');
+      return;
+    break;
+    case 'pending':
+    case 'processing':
+    case 'completed':
+      commerce_library_save_loans_from_order($order, $order->status);
+    break;
+    default:
+      watchdog('commerce_library', 'Loan processing @status', array('@status'=>$order->status));
+    break;
+  }
+}
+
+function commerce_library_commerce_order_update($order) {
+  commerce_library_loan_update_from_order($order);
+}
+
+function commerce_library_commerce_order_presave($order) {
+
+}
+
+function commerce_library_loan_status_info() {
+  $order_status = array();
+
+  $loan_status['pending'] = array(
+    'name' => 'pending',
+    'title' => t('Pending'),
+    'state' => 'pending',
+  );
+
+  $loan_status['canceled'] = array(
+    'name' => 'canceled',
+    'title' => t('Canceled'),
+    'state' => 'canceled',
+  );
+
+  $loan_status['processing'] = array(
+    'name' => 'processing',
+    'title' => t('Processing'),
+    'state' => 'pending',
+    'weight' => 5,
+  );
+
+  $loan_status['completed'] = array(
+    'name' => 'completed',
+    'title' => t('Completed'),
+    'state' => 'completed',
+    'weight' => 10,
+  );
+
+  return $loan_status;
+}

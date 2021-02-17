@@ -1,0 +1,140 @@
+<?php
+
+/**
+ * Implements hook_services_resources().
+ */
+function commerce_library_services_services_resources() {
+  $resources = array();
+
+  // Define a resource for Commerce Loan entities.
+  $resources['loan'] = array(
+     '#api_version' => 3002,
+     'operations' => array(
+     // Define the index callback for a GET to /loan.
+     'index' => array(
+          'help' => 'Returns a pageable list of loans.',
+          'callback' => 'commerce_library_services_loan_index',
+          'file' => array('type' => 'inc', 'module' => 'commerce_library_services', 'name' => 'resources/loan'),
+          'access callback' => 'commerce_library_services_loan_index_access',
+          'args' => array(
+            array(
+              'name' => 'fields',
+              'type' => 'string',
+              'description' => 'A comma separated list of field or property names from loans to include in the result set.  Will be converted to an array before being passed to the operation callback.',
+              'optional' => TRUE,
+              'source' => array('param' => 'fields'),
+              'default value' => '',
+              'commerce_services_explode' => ',',
+              'commerce_services_required_fields' => array('order_id'),
+            ),
+            array(
+              'name' => 'expand_entities',
+              'type' => 'int',
+              'description' => 'An integer depth to which entity reference field values should be expanded into full entities in a corresponding property on returned entities.',
+              'optional' => TRUE,
+              'source' => array('param' => 'expand_entities'),
+              'default value' => 1,
+            ),
+            array(
+              'name' => 'flatten_fields',
+              'type' => 'string',
+              'description' => 'A string indicating whether or not field value arrays should be flattened; accepts true or false.',
+              'optional' => TRUE,
+              'source' => array('param' => 'flatten_fields'),
+              'default value' => 'true',
+            ),
+            array(
+              'name' => 'filter',
+              'type' => 'array',
+              'description' => 'An array of field or property names from orders paired with values to use to filter the result set.',
+              'optional' => TRUE,
+              'source' => array('param' => 'filter'),
+              'default value' => array(),
+              'commerce_services_field_populate' => 'commerce_order',
+            ),
+            array(
+              'name' => 'filter_op',
+              'type' => 'array',
+              'description' => 'An array of field or property names from orders paired with the operator to use when filtering the result set.',
+              'optional' => TRUE,
+              'source' => array('param' => 'filter_op'),
+              'default value' => array(),
+              'commerce_services_match_keys' => array(
+                'arg' => 'filter',
+                'default value' => '=',
+              ),
+            ),
+            array(
+              'name' => 'sort_by',
+              'type' => 'string',
+              'description' => 'A comma separated list of field or property names from orders by which to sort the result set.',
+              'optional' => TRUE,
+              'source' => array('param' => 'sort_by'),
+              'default value' => 'order_id',
+              'commerce_services_explode' => ',',
+            ),
+            array(
+              'name' => 'sort_order',
+              'type' => 'string',
+              'description' => 'A comma separated list of sort order specifiers (DESC or ASC) indicating the direction the sort_by values should be applied to the result set.',
+              'optional' => TRUE,
+              'source' => array('param' => 'sort_order'),
+              'default value' => 'ASC',
+              'commerce_services_explode' => ',',
+            ),
+            array(
+              'name' => 'limit',
+              'type' => 'int',
+              'description' => 'The number of orders to retrieve.',
+              'optional' => TRUE,
+              'source' => array('param' => 'limit'),
+              'default value' => 10,
+            ),
+            array(
+              'name' => 'offset',
+              'type' => 'int',
+              'description' => 'The zero-based index from which to start retrieving orders.',
+              'optional' => TRUE,
+              'source' => array('param' => 'offset'),
+              'default value' => 0,
+            ),
+          ),
+        ),
+
+        // Define the retrieve callback for a GET to /loanorder/%commerce_loan.
+        'retrieve' => array(
+          'help' => 'Returns a single loan specified by its order ID.',
+          'callback' => 'commerce_library_services_loan_retrieve',
+          'file' => array('type' => 'inc', 'module' => 'commerce_library_services', 'name' => 'resources/loan'),
+          'access callback' => 'commerce_library_services_loan_retrieve_access',
+          'access arguments append' => TRUE,
+          'args' => array(
+            array(
+              'name' => 'loan_id',
+              'type' => 'int',
+              'description' => 'The loan ID of the loan to retrieve.',
+              'optional' => FALSE,
+              'source' => array('path' => 0),
+            ),
+            array(
+              'name' => 'expand_entities',
+              'type' => 'int',
+              'description' => 'An integer depth to which entity reference field values should be expanded into full entities in a corresponding property on returned entities.',
+              'optional' => TRUE,
+              'source' => array('param' => 'expand_entities'),
+              'default value' => 1,
+            ),
+            array(
+              'name' => 'flatten_fields',
+              'type' => 'string',
+              'description' => 'A string indicating whether or not field value arrays should be flattened; accepts true or false.',
+              'optional' => TRUE,
+              'source' => array('param' => 'flatten_fields'),
+              'default value' => 'true',
+            ),
+          ),
+        ),
+      ),
+    );
+ return $resources;
+}

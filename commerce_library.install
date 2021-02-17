@@ -1,0 +1,111 @@
+<?php
+
+/**
+ * @file
+ * Install, update, and uninstall functions for commerce_library.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function commerce_library_schema() {
+  $schema = array();
+
+  $schema['commerce_library_loan'] = array(
+    'description' => 'The base table for commerce library loans.',
+    'fields' => array(
+      'loan_id' => array(
+        'description' => 'The primary identifier for a loan.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'order_id' => array(
+        'description' => 'Order identifier of the order containing the loan.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'type' => array(
+        'description' => 'The type of this loan.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => 'commerce_library_loan',
+      ),
+      'product_id' => array(
+        'description' => 'The loaned product.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'amount' => array(
+        'description' => 'How many products, this must match the returned amount and will be used to re-stock.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'reloaned' => array(
+        'description' => 'Re-loan counter, 0 for first loan.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'status' => array(
+        'description' => 'The status name of this order.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when the loan order was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'updated' => array(
+        'description' => 'The Unix timestamp when the loan order was updated.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'fullfilled' => array(
+        'description' => 'The Unix timestamp when the loan was fullfilled e.g. loan starts.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'due' => array(
+        'description' => 'The Unix timestamp when the loan is due to be returned.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'returned' => array(
+        'description' => 'The Unix timestamp when the loan was returned.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+    ), // Fields
+    'primary key' => array('loan_id'),
+    'indexes' => array(
+      'status' => array('status'),
+      'due' => array('due'),
+      'loan_index_order_id_product_id' => array('order_id', 'product_id'),
+    ),
+    'foreign keys' => array(
+      'order' => array('table' => 'commerce_order', 'columns' => array('order_id' => 'order_id')),
+      'product' => array('table' => 'commerce_product', 'columns' => array('product_id' => 'product_id')),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+//function commerce_library_uninstall() {
+//}
